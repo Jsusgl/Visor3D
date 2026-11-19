@@ -41,7 +41,26 @@ app.use((req, res, next) => {
 });
 
 // Middleware
-app.use(cors());
+const allowedOriginsList = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : [];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permitir peticiones sin origen (Postman, curl, mismo servidor)
+    if (!origin) return callback(null, true);
+    // En Vercel, permitir *.vercel.app y los orígenes configurados
+    if (
+      process.env.VERCEL ||
+      allowedOriginsList.includes(origin) ||
+      /^https:\/\/[a-z0-9-]+(\.vercel\.app)$/.test(origin)
+    ) {
+      return callback(null, true);
+    }
+    callback(null, true); // Permisivo por defecto; ajustar si se requiere restricción estricta
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '2mb' })); // Límite reducido a 2mb para prevenir DoS
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
@@ -85,17 +104,21 @@ function accessControl(req, res, next) {
     });
   }
 
-  // Validación de Origen contra ataques CSRF en peticiones de modificación
-  const origin = req.headers.origin;
-  const host = req.headers.host;
-  if (origin && host) {
-    try {
-      const originHost = new URL(origin).host;
-      if (originHost !== host && (!process.env.ALLOWED_ORIGINS || !process.env.ALLOWED_ORIGINS.includes(originHost))) {
-        return res.status(403).json({ success: false, error: 'Origen no autorizado (Protección CORS/CSRF).' });
+  // Validación de Origen contra CSRF solo en entornos locales
+  // En Vercel/serverless, el host puede diferir del origen por proxies internos; se omite esta comprobación
+  if (!process.env.VERCEL) {
+    const origin = req.headers.origin;
+    const host = req.headers.host;
+    if (origin && host) {
+      try {
+        const originHost = new URL(origin).host;
+        const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+        if (originHost !== host && !allowedOrigins.includes(originHost)) {
+          return res.status(403).json({ success: false, error: 'Origen no autorizado (Protección CORS/CSRF).' });
+        }
+      } catch (e) {
+        // Ignorar errores de parseo de URL
       }
-    } catch (e) {
-      // Ignorar errores de parseo de URL
     }
   }
 
@@ -105,11 +128,15 @@ function accessControl(req, res, next) {
 app.use(accessControl);
 
 // Carpetas de archivos estáticos y subidas
-const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+const UPLOADS_DIR = process.env.VERCEL ? '/tmp' : path.join(__dirname, '..', 'uploads');
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  } catch (e) {
+    // Evitar error en sistemas de archivos serverless de solo lectura
+  }
 }
 
 app.use(express.static(PUBLIC_DIR));
@@ -325,7 +352,7 @@ app.use((req, res, next) => {
   res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
-// Inicio del servidor
+// Inicio del servidor (en local ejecuta listen, en Vercel Serverless exporta la app)
 async function startServer() {
   await db.initDb();
   app.listen(PORT, () => {
@@ -337,4 +364,10 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+} else {
+  db.initDb().catch(err => console.error('[DB Vercel Init Error]', err.message));
+}
+
+module.exports = app;
