@@ -3,24 +3,17 @@
   "builds": [
     {
       "src": "server/server.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": ["public/**", "data/**"]
-      }
+      "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "server/server.js"
-    },
-    {
-      "src": "/uploads/(.*)",
-      "dest": "server/server.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "server/server.js"
-    }
+    { "src": "/api/(.*)", "dest": "server/server.js" },
+    { "src": "/uploads/(.*)", "dest": "server/server.js" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
