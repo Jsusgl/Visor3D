@@ -2,7 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// En Vercel el filesystem es de solo lectura excepto /tmp
+const DATA_DIR = process.env.VERCEL
+  ? '/tmp/data'
+  : path.join(__dirname, '..', 'data');
 const JSON_DB_FILE = path.join(DATA_DIR, 'database.json');
 
 // Estado de la conexión
@@ -187,7 +190,10 @@ async function initDb() {
         connectionString,
         ssl: connectionString.includes('sslmode=require') || connectionString.includes('supabase.co')
           ? { rejectUnauthorized: false }
-          : false
+          : false,
+        connectionTimeoutMillis: 8000,   // 8s max para conectar (Vercel tiene límite de 10s en cold start)
+        idleTimeoutMillis: 30000,
+        max: 3                           // Pool pequeño para serverless
       });
 
       // Prueba de conexión
