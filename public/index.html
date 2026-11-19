@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3DStudio — Visor 3D y Gestor de Piezas</title>
+  
+  <!-- Tailwind CSS con soporte de clases dinámicas -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">
+    globalThis.tailwind = globalThis.tailwind || {};
+    globalThis.tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'accent': '#00A8CC',
+            'ocean-navy': '#0F2537',
+            'navy-soft': '#1E3E62',
+            'glass-border': 'rgba(255, 255, 255, 0.45)',
+            'glass-bg': 'rgba(255, 255, 255, 0.75)',
+            'light-surface': '#F8FAFC',
+            'light-on-surface': '#0B192C'
+          },
+          fontFamily: {
+            'display': ['"Afacad Flux"', 'sans-serif'],
+            'headline': ['"Afacad Flux"', 'sans-serif'],
+            'body': ['"Instrument Sans"', 'sans-serif'],
+            'label': ['"Instrument Sans"', 'sans-serif'],
+            'mono': ['"Spline Sans Mono"', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Tipografías de Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Afacad+Flux:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=block" rel="stylesheet">
+
+  <!-- Three.js y Addons vía Import Map (WebGL Nativo sin bundlers pesados) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <style>
+    .material-symbols-outlined {
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      line-height: 1 !important;
+      overflow: hidden;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(15, 37, 55, 0.2);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(15, 37, 55, 0.4);
+    }
+    .canvas-grid-bg {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(15, 37, 55, 0.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(15, 37, 55, 0.04) 1px, transparent 1px);
+    }
+    .loading-pulse {
+      animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .5; }
+    }
+  </style>
+</head>
+<body class="bg-light-surface text-light-on-surface font-body h-screen w-screen overflow-hidden select-none">
+
+  <!-- Contenedor Principal de la Aplicación -->
+  <div class="relative w-full h-full flex flex-col">
+
+    <!-- Barra de Navegación Superior (Glassmorphic) -->
+    <header class="relative z-30 flex items-center justify-between px-6 py-2.5 bg-white/85 backdrop-blur-xl border-b border-white/70 shadow-sm shadow-ocean-navy/5">
+      <!-- Izquierda: Logo y Datos del Modelo -->
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-ocean-navy text-white flex items-center justify-center shadow-md shadow-ocean-navy/20">
+            <span class="material-symbols-outlined text-accent" style="font-size: 24px;">view_in_ar</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-headline text-xl font-bold text-ocean-navy tracking-tight">3DStudio</span>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-slate-600 font-label">
+              <span id="currentModelName" class="font-semibold text-ocean-navy">Sin modelo cargado</span>
+              <span>•</span>
+              <span id="currentModelPiecesSummary">Sube un archivo 3D para comenzar</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="h-6 w-px bg-slate-200 ml-2"></div>
+
+        <!-- Selector de Modelos Disponibles -->
+        <div class="relative">
+          <select id="modelSelector" class="text-xs bg-slate-100 hover:bg-slate-200/80 text-ocean-navy font-medium py-1.5 pl-3 pr-8 rounded-md border border-slate-200 cursor-pointer focus:ring-1 focus:ring-accent focus:outline-none">
+            <option value="" disabled selected>Modelos disponibles</option>
+          </select>
+        </div>
+
+        <div class="h-6 w-px bg-slate-200"></div>
+
+        <!-- Presets de Cámara Rápida -->
+        <div class="flex items-center gap-1 bg-slate-100/90 p-1 rounded-md border border-slate-200/80">
+          <button id="viewIsoBtn" class="px-2.5 py-1 text-xs font-label rounded bg-white text-ocean-navy shadow-xs font-medium hover:bg-white/90 transition-all">Isométrica</button>
+          <button id="viewFrontBtn" class="px-2.5 py-1 text-xs font-label rounded text-slate-600 hover:text-ocean-navy transition-all">Frente</button>
+          <button id="viewTopBtn" class="px-2.5 py-1 text-xs font-label rounded text-slate-600 hover:text-ocean-navy transition-all">Superior</button>
+        </div>
+      </div>
+
+      <!-- Centro: Guía de Interacción -->
+      <div class="hidden lg:flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/90 border border-slate-200/60 shadow-xs text-xs text-slate-600">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>Haz clic en cualquier pieza 3D para examinar sus detalles y medidas</span>
+      </div>
+
+      <!-- Derecha: Acciones Principales -->
+      <div class="flex items-center gap-2">
+        <!-- Alternar Despiece / Explosión -->
+        <button id="explodeToggleBtn" class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-ocean-navy border border-slate-200 rounded-md font-label text-xs font-medium shadow-xs transition-all" title="Separar o unir componentes del modelo">
+          <span class="material-symbols-outlined text-accent" style="font-size: 18px;">splitscreen</span>
+          <span id="explodeBtnText" class="whitespace-nowrap">Despiece 3D</span>
+        </button>
+
+        <!-- Modo Malla Alámbrica -->
+        <button id="wireframeToggleBtn" class="p-2 bg-white hover:bg-slate-50 text-ocean-navy border border-slate-200 rounded-md shadow-xs transition-all" title="Alternar modo alambre (wireframe)">
+          <span class="material-symbols-outlined" style="font-size: 18px;">grid_3x3</span>
+        </button>
+
+        <!-- Reiniciar Cámara -->
+        <button id="resetCamBtn" class="p-2 bg-white hover:bg-slate-50 text-ocean-navy border border-slate-200 rounded-md shadow-xs transition-all" title="Reiniciar cámara y centrar modelo">
+          <span class="material-symbols-outlined" style="font-size: 18px;">filter_center_focus</span>
+        </button>
+
+        <!-- Botón Subir Modelo -->
+        <button id="openUploadModalBtn" type="button" class="inline-flex items-center justify-center gap-2 px-3.5 py-1.5 bg-ocean-navy hover:bg-navy-soft text-white rounded-md font-label text-xs font-semibold shadow-md shadow-ocean-navy/15 transition-all active:scale-[0.98]">
+          <span class="material-symbols-outlined text-accent" style="font-size: 18px;">cloud_upload</span>
+          <span class="whitespace-nowrap">Subir Modelo</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Espacio de Trabajo Principal (Viewport 3D y Paneles Flotantes) -->
+    <div class="relative flex-1 w-full h-full overflow-hidden canvas-grid-bg">
+
+      <!-- Contenedor del Canvas WebGL Three.js -->
+      <div id="threeContainer" class="absolute inset-0 cursor-grab active:cursor-grabbing"></div>
+
+      <!-- Spinner de Carga de Modelos -->
+      <div id="loaderOverlay" class="absolute inset-0 z-40 bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center gap-3 transition-opacity duration-300 pointer-events-none opacity-0">
+        <div class="w-12 h-12 border-4 border-ocean-navy border-t-accent rounded-full animate-spin"></div>
+        <p id="loaderText" class="text-sm font-semibold text-ocean-navy font-label">Cargando modelo 3D...</p>
+      </div>
+
+      <!-- Panel Flotante Izquierdo: Árbol de Piezas -->
+      <aside class="absolute top-4 left-4 z-20 w-80 max-h-[calc(100vh-100px)] flex flex-col bg-white/90 backdrop-blur-xl border border-white/80 rounded-xl shadow-xl shadow-ocean-navy/5 overflow-hidden transition-all">
+        <!-- Encabezado del Panel -->
+        <div class="p-3.5 border-b border-slate-200/70 flex items-center justify-between bg-white/60">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-ocean-navy" style="font-size: 20px;">account_tree</span>
+            <h2 class="font-headline text-base text-ocean-navy font-bold">Piezas del Modelo</h2>
+          </div>
+          <span id="partsCountBadge" class="px-2 py-0.5 bg-ocean-navy/10 text-ocean-navy rounded-full text-xs font-mono font-semibold">0 piezas</span>
+        </div>
+
+        <!-- Buscador de Piezas -->
+        <div class="p-2.5 border-b border-slate-100 bg-white/30">
+          <div class="relative">
+            <span class="material-symbols-outlined absolute left-2.5 top-2 text-slate-400" style="font-size: 18px;">search</span>
+            <input id="searchPartsInput" type="text" placeholder="Buscar por nombre o código..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent text-ocean-navy placeholder-slate-400">
+          </div>
+        </div>
+
+        <!-- Lista Dinámica de Piezas -->
+        <div id="partsListContainer" class="flex-1 overflow-y-auto p-2 space-y-1 text-xs">
+          <!-- Generado dinámicamente -->
+        </div>
+
+        <!-- Pie del Panel -->
+        <div class="p-3 bg-white/60 border-t border-slate-200/70 flex items-center justify-between text-xs text-slate-600">
+          <button id="showAllBtn" class="hover:text-ocean-navy font-label font-semibold transition-colors flex items-center gap-1">
+            <span class="material-symbols-outlined" style="font-size: 16px;">visibility</span> Mostrar Todas
+          </button>
+          <span id="totalTrianglesLabel" class="font-mono text-slate-500 font-medium">0 tris</span>
+        </div>
+      </aside>
+
+      <!-- Panel Flotante Derecho: Inspector Técnico y Guardado en Base de Datos -->
+      <aside id="inspectorCard" class="absolute top-4 right-4 z-20 w-96 max-h-[calc(100vh-100px)] bg-white/95 backdrop-blur-xl border border-white/80 rounded-xl p-4 shadow-xl shadow-ocean-navy/5 flex flex-col gap-3 overflow-y-auto transition-all">
+        <!-- Cabecera del Inspector -->
+        <header class="flex items-start justify-between border-b border-slate-100 pb-2.5">
+          <div class="flex-1 mr-2">
+            <div class="flex items-center gap-2 mb-1">
+              <span id="inspectorDbBadge" class="inline-block px-2 py-0.5 font-label text-[10px] font-bold rounded-full uppercase tracking-wider bg-amber-100 text-amber-800">
+                🟡 No registrado en BD
+              </span>
+              <span id="inspectorMeshBadge" class="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">mesh_name</span>
+            </div>
+            <h3 id="inspectorPartTitle" class="font-headline text-lg font-bold text-ocean-navy leading-tight">
+              Selecciona una pieza
+            </h3>
+            <p id="inspectorPartSubtitle" class="text-xs text-slate-500 font-label">Haz clic en el visor 3D o en la lista de piezas</p>
+          </div>
+          <button id="deselectPartBtn" title="Cerrar detalles" class="p-1 text-slate-400 hover:text-ocean-navy hover:bg-slate-100 rounded-md transition-all">
+            <span class="material-symbols-outlined" style="font-size: 18px;">close</span>
+          </button>
+        </header>
+
+        <!-- Formulario de Metadatos y Medidas para la Base de Datos -->
+        <form id="partForm" class="space-y-3 text-xs">
+          <!-- Nombre para mostrar -->
+          <div>
+            <label class="block text-slate-600 font-medium mb-1">Nombre Descriptivo de la Pieza:</label>
+            <input type="text" id="inputPartName" class="w-full px-2.5 py-1.5 border border-slate-200 rounded-md focus:ring-1 focus:ring-accent focus:outline-none text-ocean-navy font-semibold" placeholder="Ej. Turbina Principal">
+          </div>
+
+          <!-- Código SKU y Categoría -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-slate-600 font-medium mb-1">Código / SKU:</label>
+              <input type="text" id="inputPartCode" class="w-full px-2.5 py-1.5 border border-slate-200 rounded-md focus:ring-1 focus:ring-accent focus:outline-none font-mono text-ocean-navy" placeholder="PART-001">
+            </div>
+            <div>
+              <label class="block text-slate-600 font-medium mb-1">Categoría:</label>
+              <input type="text" id="inputPartCategory" class="w-full px-2.5 py-1.5 border border-slate-200 rounded-md focus:ring-1 focus:ring-accent focus:outline-none text-ocean-navy" placeholder="Estructural / Propulsión">
+            </div>
+          </div>
+
+          <!-- Material y Estado -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-slate-600 font-medium mb-1">Material:</label>
+              <input type="text" id="inputPartMaterial" class="w-full px-2.5 py-1.5 border border-slate-200 rounded-md focus:ring-1 focus:ring-accent focus:outline-none text-ocean-navy" placeholder="Titanio / Acero">
+            </div>
+            <div>
+              <label class="block text-slate-600 font-medium mb-1">Estado de Ensamble:</label>
+              <select id="selectPartStatus" class="w-full px-2 py-1.5 border border-slate-200 rounded-md focus:ring-1 focus:ring-accent focus:outline-none text-ocean-navy bg-white">
+                <option value="Calibrado">Calibrado</option>
+                <option value="Ensamblado">Ensamblado</option>
+                <option value="Inspeccionado">Inspeccionado</option>
+                <option value="Pendiente">Pendiente</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Dimensiones Geométricas (Bounding Box Calculado en 3D) -->
+          <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-semibold text-ocean-navy flex items-center gap-1">
+                <span class="material-symbols-outlined text-accent" style="font-size: 16px;">straighten</span>
+                Medidas Automáticas (3D Box)
+              </span>
+              <div class="flex items-center gap-1">
+                <label for="selectDimensionUnit" class="text-slate-500 text-[10px]">Unidad:</label>
+                <select id="selectDimensionUnit" class="text-[11px] border border-slate-200 rounded px-1 py-0.5 bg-white text-ocean-navy">
+                  <option value="mm">mm</option>
+                  <option value="cm">cm</option>
+                  <option value="m">m</option>
+                  <option value="in">pulgadas</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
+              <div class="bg-white p-1.5 rounded border border-slate-200 text-center">
+                <span class="text-slate-400 block text-[9px] uppercase">Ancho (X)</span>
+                <input type="number" step="0.1" id="inputWidthX" class="w-full text-center font-bold text-ocean-navy focus:outline-none bg-transparent">
+              </div>
+              <div class="bg-white p-1.5 rounded border border-slate-200 text-center">
+                <span class="text-slate-400 block text-[9px] uppercase">Alto (Y)</span>
+                <input type="number" step="0.1" id="inputHeightY" class="w-full text-center font-bold text-ocean-navy focus:outline-none bg-transparent">
+              </div>
+              <div class="bg-white p-1.5 rounded border border-slate-200 text-center">
+                <span class="text-slate-400 block text-[9px] uppercase">Profund. (Z)</span>
+                <input type="number" step="0.1" id="inputDepthZ" class="w-full text-center font-bold text-ocean-navy focus:outline-none bg-transparent">
+              </div>
+            </div>
+            <div class="flex items-center justify-between mt-1.5 text-[10px] text-slate-500">
+              <span id="partTrianglesCount">0 triángulos poligonales</span>
+              <button type="button" id="recalcDimsBtn" class="text-accent hover:underline flex items-center gap-0.5">
+                <span class="material-symbols-outlined" style="font-size: 12px;">refresh</span> Recalcular 3D
+              </button>
+            </div>
+          </div>
+
+          <!-- Notas Técnicas -->
+          <div>
+            <label class="block text-slate-600 font-medium mb-1">Notas Técnicas / Observaciones:</label>
+            <textarea id="inputPartNotes" rows="2" class="w-full px-2.5 py-1.5 border border-slate-200 rounded-md focus:ring-1 focus:ring-accent focus:outline-none text-ocean-navy text-xs" placeholder="Tolerancias, fecha de calibración, especificaciones..."></textarea>
+          </div>
+
+          <!-- Botón de Guardar en la Base de Datos -->
+          <button id="savePartBtn" type="button" class="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-md shadow-md shadow-emerald-900/10 transition-all flex items-center justify-center gap-1.5 active:scale-[0.98]">
+            <span class="material-symbols-outlined" style="font-size: 18px;">save</span>
+            <span>Guardar Pieza en Base de Datos</span>
+          </button>
+        </form>
+
+        <!-- Botones de Acción sobre la Pieza en el Visor 3D -->
+        <div class="pt-2 flex flex-col gap-1.5 border-t border-slate-100">
+          <div class="flex gap-2">
+            <button id="isolatePartBtn" type="button" class="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-3 bg-ocean-navy hover:bg-navy-soft text-white text-xs rounded-md shadow-xs transition-all active:scale-[0.98]">
+              <span class="material-symbols-outlined" style="font-size: 16px;">visibility</span>
+              <span id="isolateBtnText">Aislar Pieza</span>
+            </button>
+            <button id="focusPartBtn" type="button" class="inline-flex items-center justify-center p-2 border border-slate-200 hover:border-slate-300 text-ocean-navy bg-white rounded-md shadow-xs transition-all" title="Centrar cámara en esta pieza">
+              <span class="material-symbols-outlined" style="font-size: 18px;">center_focus_strong</span>
+            </button>
+          </div>
+          <button id="hidePartBtn" type="button" class="py-1 px-3 border border-slate-200 text-slate-600 hover:text-ocean-navy hover:bg-slate-50 text-xs rounded-md transition-all">
+            Ocultar temporalmente
+          </button>
+        </div>
+      </aside>
+
+      <!-- Barra de Herramientas Inferior Flotante (Glassmorphic) -->
+      <div class="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 p-1.5 bg-white/90 backdrop-blur-xl border border-white/80 rounded-full shadow-2xl shadow-ocean-navy/10 text-xs">
+        <!-- Rotación Automática -->
+        <button id="autoRotateBtn" class="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-slate-700 hover:text-ocean-navy hover:bg-white transition-all font-medium" title="Activar/desactivar rotación suave">
+          <span class="material-symbols-outlined text-accent" style="font-size: 16px;">360</span>
+          <span id="autoRotateText">Rotación: ON</span>
+        </button>
+
+        <div class="h-4 w-px bg-slate-200"></div>
+
+        <!-- Iluminación -->
+        <button id="lightingToggleBtn" class="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-full text-slate-700 hover:text-ocean-navy hover:bg-white transition-all font-medium" title="Cambiar modo de iluminación">
+          <span class="material-symbols-outlined" style="font-size: 16px;">wb_sunny</span>
+          <span>Luz Estudio</span>
+        </button>
+
+        <div class="h-4 w-px bg-slate-200"></div>
+
+        <!-- Slider de Despiece 3D -->
+        <div class="flex items-center gap-2 px-2">
+          <span class="material-symbols-outlined text-slate-500" style="font-size: 16px;">unfold_more</span>
+          <label for="explodeSlider" class="text-slate-700 font-medium whitespace-nowrap">Despiece:</label>
+          <input id="explodeSlider" type="range" min="0" max="100" value="0" class="w-24 accent-ocean-navy cursor-pointer">
+          <span id="explodeSliderVal" class="font-mono text-ocean-navy font-semibold w-8">0%</span>
+        </div>
+
+        <div class="h-4 w-px bg-slate-200"></div>
+
+        <!-- Controles de Zoom -->
+        <div class="flex items-center pr-1">
+          <button id="zoomOutBtn" class="p-1 hover:bg-white text-slate-700 hover:text-ocean-navy rounded-full transition-all" title="Alejar">
+            <span class="material-symbols-outlined" style="font-size: 16px;">remove</span>
+          </button>
+          <button id="zoomInBtn" class="p-1 hover:bg-white text-slate-700 hover:text-ocean-navy rounded-full transition-all" title="Acercar">
+            <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Guía Rápida Inferior Izquierda -->
+      <div class="absolute bottom-5 left-5 z-10 hidden md:flex items-center gap-2 px-3.5 py-2 bg-white/90 backdrop-blur-md border border-white/80 rounded-md text-xs text-slate-600 font-medium shadow-xs">
+        <span class="material-symbols-outlined text-accent" style="font-size: 16px;">mouse</span>
+        <span>Arrastra para rotar • Clic para seleccionar pieza • Rueda para zoom</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Subir Nuevo Modelo 3D -->
+  <div id="uploadModal" class="fixed inset-0 z-50 hidden bg-ocean-navy/40 backdrop-blur-md flex items-center justify-center p-4 transition-all" aria-hidden="true">
+    <div class="w-full max-w-lg bg-white backdrop-blur-2xl border border-white/80 rounded-2xl p-6 shadow-2xl shadow-ocean-navy/20 relative">
+      <header class="flex items-start justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-ocean-navy/5 text-ocean-navy flex items-center justify-center">
+            <span class="material-symbols-outlined text-accent" style="font-size: 24px;">upload_file</span>
+          </div>
+          <div>
+            <h2 class="font-headline text-lg font-bold text-ocean-navy">Cargar Modelo 3D WebGL</h2>
+            <p class="text-xs text-slate-500">Soporte para GLB, GLTF, OBJ y STL con jerarquía de piezas</p>
+          </div>
+        </div>
+        <button id="closeUploadModalBtn" type="button" class="p-1.5 text-slate-400 hover:text-ocean-navy hover:bg-slate-100 rounded-md transition-all">
+          <span class="material-symbols-outlined" style="font-size: 20px;">close</span>
+        </button>
+      </header>
+
+      <!-- Zona Drag & Drop -->
+      <div id="dropzone" class="my-5 border-2 border-dashed border-slate-300 hover:border-accent hover:bg-accent/5 rounded-xl p-6 flex flex-col items-center justify-center gap-2.5 bg-slate-50/70 transition-all cursor-pointer group">
+        <input type="file" id="fileInput" accept=".glb,.gltf,.obj,.stl" class="hidden">
+        <div class="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
+          <span class="material-symbols-outlined" style="font-size: 26px;">cloud_upload</span>
+        </div>
+        <div class="text-center">
+          <p id="dropzoneFileName" class="text-xs font-semibold text-ocean-navy">Arrastra tu archivo 3D aquí o haz clic para seleccionarlo</p>
+          <p class="text-[11px] text-slate-500 mt-0.5">Formatos compatibles nativos WebGL</p>
+        </div>
+        <div class="flex items-center gap-1.5 mt-1">
+          <span class="px-2 py-0.5 bg-slate-200 text-slate-800 text-[10px] font-mono font-medium rounded">.GLB</span>
+          <span class="px-2 py-0.5 bg-slate-200 text-slate-800 text-[10px] font-mono font-medium rounded">.GLTF</span>
+          <span class="px-2 py-0.5 bg-slate-200 text-slate-800 text-[10px] font-mono font-medium rounded">.OBJ</span>
+          <span class="px-2 py-0.5 bg-slate-200 text-slate-800 text-[10px] font-mono font-medium rounded">.STL</span>
+        </div>
+      </div>
+
+      <!-- Datos adicionales del modelo -->
+      <div class="space-y-3 mb-5 text-xs">
+        <div>
+          <label class="block text-slate-600 font-medium mb-1">Nombre del Modelo:</label>
+          <input type="text" id="uploadModelName" placeholder="Ej. Turbina Eólica Prototipo V2" class="w-full px-3 py-1.5 border border-slate-200 rounded-md focus:ring-1 focus:ring-accent focus:outline-none text-ocean-navy">
+        </div>
+        <div>
+          <label class="block text-slate-600 font-medium mb-1">Descripción / Proyecto:</label>
+          <input type="text" id="uploadModelDesc" placeholder="Ensamblaje mecánico para calibración" class="w-full px-3 py-1.5 border border-slate-200 rounded-md focus:ring-1 focus:ring-accent focus:outline-none text-ocean-navy">
+        </div>
+      </div>
+
+      <footer class="flex items-center justify-between pt-3 border-t border-slate-100">
+        <span class="text-[11px] text-slate-500 font-medium">Tamaño máximo: 250 MB</span>
+        <div class="flex gap-2">
+          <button id="cancelUploadBtn" type="button" class="px-3.5 py-1.5 border border-slate-200 text-ocean-navy text-xs rounded-md hover:bg-slate-50 transition-all font-medium">
+            Cancelar
+          </button>
+          <button id="confirmUploadBtn" type="button" class="px-4 py-1.5 bg-ocean-navy hover:bg-navy-soft text-white text-xs font-semibold rounded-md shadow-md shadow-ocean-navy/15 transition-all flex items-center gap-1.5">
+            <span class="material-symbols-outlined" style="font-size: 16px;">upload</span>
+            <span>Cargar al Visor</span>
+          </button>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Modal: Estado e Instrucciones de Base de Datos -->
+  <div id="dbModal" class="fixed inset-0 z-50 hidden bg-ocean-navy/40 backdrop-blur-md flex items-center justify-center p-4 transition-all" aria-hidden="true">
+    <div class="w-full max-w-xl bg-white backdrop-blur-2xl border border-white/80 rounded-2xl p-6 shadow-2xl shadow-ocean-navy/20 relative text-xs">
+      <header class="flex items-start justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-accent/10 text-accent flex items-center justify-center">
+            <span class="material-symbols-outlined" style="font-size: 24px;">database</span>
+          </div>
+          <div>
+            <h2 class="font-headline text-lg font-bold text-ocean-navy">Conexión a Base de Datos</h2>
+            <p class="text-xs text-slate-500">Gestión de persistencia de piezas y modelos</p>
+          </div>
+        </div>
+        <button id="closeDbModalBtn" type="button" class="p-1.5 text-slate-400 hover:text-ocean-navy hover:bg-slate-100 rounded-md transition-all">
+          <span class="material-symbols-outlined" style="font-size: 20px;">close</span>
+        </button>
+      </header>
+
+      <div class="my-4 space-y-3">
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+          <p class="font-semibold text-ocean-navy mb-1">Estado Actual:</p>
+          <p id="modalDbStatusDetail" class="text-slate-600 font-mono text-[11px]">Consultando...</p>
+        </div>
+
+        <div class="space-y-2 text-slate-600">
+          <p class="font-semibold text-ocean-navy">¿Cómo conectar tu propia base de datos PostgreSQL?</p>
+          <ol class="list-decimal list-inside space-y-1.5 text-[11px] leading-relaxed">
+            <li>Crea tu base de datos en PostgreSQL (Local, Supabase, Neon o Docker) con <code class="bg-slate-100 px-1 py-0.5 rounded text-ocean-navy font-mono">CREATE DATABASE visor3d;</code>.</li>
+            <li>Ejecuta el script SQL incluido en <code class="bg-slate-100 px-1 py-0.5 rounded text-ocean-navy font-mono">server/schema.sql</code>.</li>
+            <li>Abre el archivo <code class="bg-slate-100 px-1 py-0.5 rounded text-ocean-navy font-mono">.env</code> y coloca tu URL de conexión:</li>
+          </ol>
+          <pre class="bg-ocean-navy text-slate-200 p-2.5 rounded-md font-mono text-[10px] overflow-x-auto">DATABASE_URL=postgresql://usuario:password@localhost:5432/visor3d</pre>
+          <p class="text-[11px] text-slate-500 italic">
+            * Mientras no configures la base de datos externa, los datos se guardan de forma segura en el archivo local <code class="font-mono">data/database.json</code> sin interrumpir tu trabajo.
+          </p>
+        </div>
+      </div>
+
+      <footer class="pt-3 border-t border-slate-100 flex justify-end">
+        <button id="acceptDbModalBtn" type="button" class="px-4 py-1.5 bg-ocean-navy hover:bg-navy-soft text-white text-xs font-semibold rounded-md transition-all">
+          Entendido
+        </button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Toast de Notificaciones -->
+  <div id="toastNotification" class="fixed top-5 right-5 z-50 transform translate-y-[-100px] opacity-0 transition-all duration-300 flex items-center gap-2.5 px-4 py-2.5 rounded-lg shadow-xl text-xs font-medium text-white bg-ocean-navy border border-white/20 pointer-events-none">
+    <span id="toastIcon" class="material-symbols-outlined text-accent" style="font-size: 18px;">check_circle</span>
+    <span id="toastMessage">Operación exitosa</span>
+  </div>
+
+  <!-- Script Principal de la Aplicación -->
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

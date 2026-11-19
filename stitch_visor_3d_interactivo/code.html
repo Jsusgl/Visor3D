@@ -1,0 +1,898 @@
+<!DOCTYPE html><html lang="es"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visualizador 3D — VoxelStudio</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">/** @type {import('tailwindcss').Config} */
+globalThis.tailwind = globalThis.tailwind || {};
+globalThis.tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        'accent': '#00A8CC',
+        'ocean-navy': '#0F2537',
+        'navy-soft': '#1E3E62',
+        'glass-border': 'rgba(255, 255, 255, 0.45)',
+        'glass-bg': 'rgba(255, 255, 255, 0.75)',
+        'light-primary': '#0F2537',
+        'light-on-primary': '#FFFFFF',
+        'light-surface': '#F8FAFC',
+        'light-on-surface': '#0B192C',
+        'dark-primary': '#38BDF8',
+        'dark-on-primary': '#0B192C',
+        'dark-surface': '#0A1118',
+        'dark-on-surface': '#F1F5F9',
+      },
+      borderRadius: {
+        'sm': '6px',
+        'DEFAULT': '10px',
+        'md': '14px',
+        'lg': '20px',
+        'xl': '28px',
+        'full': '9999px',
+      },
+      spacing: {
+        'gutter-xs': '4px',
+        'gutter-sm': '8px',
+        'gutter-md': '16px',
+        'gutter-lg': '24px',
+        'gutter-xl': '32px',
+        'section': '48px',
+        'page-margin': '24px',
+      },
+      fontFamily: {
+        'display': ['"Afacad Flux"', 'sans-serif'],
+        'headline': ['"Afacad Flux"', 'sans-serif'],
+        'body': ['"Instrument Sans"', 'sans-serif'],
+        'label': ['"Instrument Sans"', 'sans-serif'],
+        'mono': ['"Spline Sans Mono"', 'monospace'],
+      },
+      fontSize: {
+        'display-lg': ['40px', { lineHeight: '48px', letterSpacing: '-0.5px', fontWeight: '700' }],
+        'display-lg-mobile': ['30px', { lineHeight: '36px', letterSpacing: '-0.25px', fontWeight: '700' }],
+        'headline-lg': ['28px', { lineHeight: '34px', fontWeight: '600' }],
+        'headline-lg-mobile': ['22px', { lineHeight: '28px', fontWeight: '600' }],
+        'headline-md': ['20px', { lineHeight: '26px', fontWeight: '600' }],
+        'headline-md-mobile': ['18px', { lineHeight: '24px', fontWeight: '600' }],
+        'body-md': ['14px', { lineHeight: '20px', fontWeight: '400' }],
+        'body-sm': ['12px', { lineHeight: '18px', fontWeight: '400' }],
+        'label-lg': ['14px', { lineHeight: '20px', fontWeight: '500' }],
+        'label-md': ['12px', { lineHeight: '16px', fontWeight: '500' }],
+        'label-sm': ['11px', { lineHeight: '14px', fontWeight: '500' }],
+        'mono-sm': ['12px', { lineHeight: '16px', fontWeight: '400' }],
+      },
+      transitionDuration: {
+        'state-change': '120ms',
+        'surface-enter': '220ms',
+        'surface-exit': '140ms',
+      },
+      transitionDelay: {
+        'state-change': '0ms',
+        'surface-enter': '0ms',
+        'surface-exit': '0ms',
+      },
+      transitionTimingFunction: {
+        'state-change': 'ease-out',
+        'surface-enter': 'cubic-bezier(0.16, 1, 0.3, 1)',
+        'surface-exit': 'cubic-bezier(0.4, 0, 1, 1)',
+      },
+    },
+  },
+};
+if (typeof module !== 'undefined') module.exports = globalThis.tailwind.config;
+</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Afacad+Flux:wght@400;500;600;700&amp;family=Instrument+Sans:wght@400;500;600&amp;family=Spline+Sans+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=block" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    .material-symbols-outlined {
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      line-height: 1 !important;
+      box-sizing: content-box;
+      overflow: hidden;
+      white-space: nowrap;
+      direction: ltr;
+      vertical-align: middle;
+    }
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(15, 37, 55, 0.2);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(15, 37, 55, 0.4);
+    }
+    .canvas-grid-bg {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(15, 37, 55, 0.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(15, 37, 55, 0.04) 1px, transparent 1px);
+    }
+  </style>
+</head>
+<body class="bg-light-surface text-light-on-surface font-body min-h-[1024px] overflow-hidden select-none" data-stitch-vh="min-h-[1024px]===min-h-screen">
+
+  <!-- Main Viewport Layout -->
+  <div class="relative w-full h-[1024px] flex flex-col" data-stitch-vh="h-[1024px]===h-screen">
+
+    <!-- Top Navigation Bar (Glassmorphic) -->
+    <header class="relative z-30 flex items-center justify-between px-6 py-3 bg-white/80 backdrop-blur-xl border-b border-white/70 shadow-sm shadow-ocean-navy/5">
+      <!-- Left: Logo & Project Info -->
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-md bg-ocean-navy text-white flex items-center justify-center shadow-md shadow-ocean-navy/20">
+            <span class="material-symbols-outlined text-accent" style="font-size: 20px;">view_in_ar</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-headline text-headline-md font-bold text-ocean-navy tracking-tight">VoxelStudio</span>
+              <span class="px-2 py-0.5 rounded-full bg-accent/15 text-navy-soft font-label text-label-sm font-semibold tracking-wide uppercase">Visor 3D</span>
+            </div>
+            <p class="text-body-sm text-slate-600 font-label">Motor_Propulsor_AeroV1.glb <span class="text-slate-600">•</span> 6 piezas ensambladas</p>
+          </div>
+        </div>
+
+        <div class="h-6 w-px bg-slate-200 ml-2"></div>
+
+        <!-- View Presets Quick Tabs -->
+        <div class="flex items-center gap-1 bg-slate-100/90 p-1 rounded-md border border-slate-200/80">
+          <button id="viewIsoBtn" class="px-3 py-1 text-label-sm font-label rounded-sm bg-white text-ocean-navy shadow-xs font-medium transition-all">Isométrica</button>
+          <button id="viewFrontBtn" class="px-3 py-1 text-label-sm font-label rounded-sm text-slate-700 hover:text-ocean-navy transition-all">Frente</button>
+          <button id="viewTopBtn" class="px-3 py-1 text-label-sm font-label rounded-sm text-slate-700 hover:text-ocean-navy transition-all">Superior</button>
+        </div>
+      </div>
+
+      <!-- Center: Status Alert / Interaction Hint -->
+      <div class="hidden lg:flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/90 border border-slate-200/60 shadow-xs text-body-sm text-slate-700">
+        <span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+        <span class="font-label">Haz clic en cualquier pieza 3D para examinar sus detalles técnicos</span>
+      </div>
+
+      <!-- Right: Main Actions -->
+      <div class="flex items-center gap-3">
+        <!-- Explode Assembly Toggle -->
+        <button id="explodeToggleBtn" class="inline-flex items-center justify-center gap-2 px-3.5 py-2 min-w-[170px] bg-white hover:bg-slate-50 text-ocean-navy border border-slate-200 rounded-md font-label text-label-md shadow-xs transition-all duration-state-change" title="Separar o unir componentes del modelo">
+          <span class="material-symbols-outlined text-accent" style="font-size: 18px;">splitscreen</span>
+          <span id="explodeBtnText" class="whitespace-nowrap font-medium">Explosionar Modelo</span>
+        </button>
+
+        <!-- Wireframe Mode Toggle -->
+        <button id="wireframeToggleBtn" class="p-2 bg-white hover:bg-slate-50 text-ocean-navy border border-slate-200 rounded-md shadow-xs transition-all" title="Modo Malla (Wireframe)" aria-label="Alternar malla alámbrica">
+          <span class="material-symbols-outlined" style="font-size: 18px;">grid_3x3</span>
+        </button>
+
+        <!-- Reset Camera -->
+        <button id="resetCamBtn" class="p-2 bg-white hover:bg-slate-50 text-ocean-navy border border-slate-200 rounded-md shadow-xs transition-all" title="Centrar y reiniciar cámara" aria-label="Reiniciar cámara">
+          <span class="material-symbols-outlined" style="font-size: 18px;">filter_center_focus</span>
+        </button>
+
+        <!-- Subir Modelo (Primary Action) -->
+        <button id="openUploadModalBtn" type="button" class="inline-flex items-center justify-center gap-2 px-4 py-2 min-w-[145px] bg-ocean-navy hover:bg-navy-soft text-white rounded-md font-label text-label-md shadow-md shadow-ocean-navy/15 transition-all duration-state-change active:scale-[0.98]">
+          <span class="material-symbols-outlined text-accent" style="font-size: 18px;">cloud_upload</span>
+          <span data-design-text-token="label-md" class="whitespace-nowrap font-medium">Subir Modelo</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Workspace Body: Viewport + Floating Glass Panels -->
+    <div class="relative flex-1 w-full h-full overflow-hidden canvas-grid-bg min-w-0">
+
+      <!-- WebGL 3D Canvas -->
+      <div id="threeContainer" class="absolute inset-0 cursor-grab active:cursor-grabbing min-w-0"></div>
+
+      <!-- Left Floating Glass Panel: Hierarchy & Parts List -->
+      <aside class="absolute top-5 left-5 z-20 w-80 max-h-[calc(1024px-120px)] flex flex-col bg-white/85 backdrop-blur-xl border border-white/80 rounded-lg shadow-xl shadow-ocean-navy/5 overflow-hidden transition-all duration-surface-enter" data-stitch-vh="max-h-[calc(1024px-120px)]===max-h-[calc(100vh-120px)]">
+        <div class="p-4 border-b border-slate-200/70 flex items-center justify-between bg-white/60">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-ocean-navy" style="font-size: 20px;">account_tree</span>
+            <h2 class="font-headline text-headline-md text-ocean-navy font-semibold">Piezas del Modelo</h2>
+          </div>
+          <span id="partsCountBadge" class="px-2 py-0.5 bg-ocean-navy/10 text-ocean-navy rounded-full text-label-sm font-mono font-medium">6 piezas</span>
+        </div>
+
+        <div class="p-3 border-b border-slate-100 bg-white/30">
+          <div class="relative">
+            <span class="material-symbols-outlined absolute left-2.5 top-2 text-slate-500" style="font-size: 18px;">search</span>
+            <input id="searchPartsInput" type="text" placeholder="Buscar pieza o componente..." class="w-full pl-8 pr-3 py-1.5 text-body-sm bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-accent focus:border-accent text-ocean-navy placeholder-slate-400">
+          </div>
+        </div>
+
+        <!-- Tree List of Parts -->
+        <div id="partsListContainer" class="flex-1 overflow-y-auto p-2.5 space-y-1.5 text-body-sm">
+          <!-- Populated dynamically via JS -->
+        </div>
+
+        <div class="p-3 bg-white/60 border-t border-slate-200/70 flex items-center justify-between text-body-sm text-slate-700">
+          <button id="showAllBtn" class="hover:text-ocean-navy font-label text-label-sm font-semibold transition-colors flex items-center gap-1.5">
+            <span class="material-symbols-outlined" style="font-size: 16px;">visibility</span> Mostrar Todas
+          </button>
+          <span class="text-label-sm font-mono text-slate-600 font-medium">Total: 84.2K tris</span>
+        </div>
+      </aside>
+
+      <!-- Right Floating Glass Panel: Part Technical Inspector -->
+      <aside id="inspectorCard" class="absolute top-5 right-5 z-20 w-84 bg-white/90 backdrop-blur-xl border border-white/80 rounded-lg p-5 shadow-xl shadow-ocean-navy/5 flex flex-col gap-4 transition-all duration-surface-enter">
+        <header class="flex items-start justify-between border-b border-slate-100 pb-3">
+          <div>
+            <span class="inline-block px-2.5 py-0.5 bg-ocean-navy text-white font-label text-label-sm font-semibold rounded-full mb-1 shadow-xs">
+              Pieza Activa
+            </span>
+            <h3 id="inspectorPartName" data-design-text-token="headline-md" class="font-headline text-headline-md font-bold text-ocean-navy">
+              Turbina Frontal Rotatoria
+            </h3>
+            <p id="inspectorPartCategory" class="text-body-sm text-slate-600 font-label font-medium">Propulsor • Etapa Primaria</p>
+          </div>
+          <button id="deselectPartBtn" title="Deseleccionar pieza" class="p-1.5 text-slate-400 hover:text-ocean-navy hover:bg-slate-100 rounded-md transition-all">
+            <span class="material-symbols-outlined" style="font-size: 18px;">close</span>
+          </button>
+        </header>
+
+        <!-- Technical Parameters List -->
+        <div class="space-y-2.5 text-body-sm">
+          <div class="flex justify-between items-center py-1 border-b border-slate-100">
+            <span class="text-slate-600">ID Identificador:</span>
+            <span id="inspectorPartId" class="font-mono text-mono-sm text-ocean-navy font-semibold">PART-01_TURBINE</span>
+          </div>
+          <div class="flex justify-between items-center py-1 border-b border-slate-100">
+            <span class="text-slate-600">Material Asignado:</span>
+            <span id="inspectorPartMaterial" class="font-medium text-ocean-navy flex items-center gap-1.5">
+              <span id="inspectorColorPip" class="w-3 h-3 rounded-full bg-ocean-navy border border-white shadow-xs"></span>
+              Titanio Anodizado
+            </span>
+          </div>
+          <div class="flex justify-between items-center py-1 border-b border-slate-100">
+            <span class="text-slate-600">Complejidad (Polígonos):</span>
+            <span id="inspectorPartPoly" class="font-mono text-mono-sm text-ocean-navy font-medium">18,400 tris</span>
+          </div>
+          <div class="flex justify-between items-center py-1 border-b border-slate-100">
+            <span class="text-slate-600">Dimensiones (Bounding Box):</span>
+            <span id="inspectorPartDim" class="font-mono text-mono-sm text-ocean-navy font-medium">140 × 140 × 60 mm</span>
+          </div>
+          <div class="flex justify-between items-center py-1">
+            <span class="text-slate-600">Estado de Ensamble:</span>
+            <span id="inspectorPartStatus" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-label-sm font-label font-semibold bg-emerald-100 text-emerald-900">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Calibrado
+            </span>
+          </div>
+        </div>
+
+        <!-- Part Action Controls -->
+        <div class="pt-2 flex flex-col gap-2 border-t border-slate-100">
+          <div class="flex gap-2">
+            <button id="isolatePartBtn" type="button" class="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-ocean-navy hover:bg-navy-soft text-white text-label-md rounded-md font-label shadow-xs transition-all active:scale-[0.98]">
+              <span class="material-symbols-outlined" style="font-size: 16px;">visibility</span>
+              <span id="isolateBtnText" class="font-medium">Aislar Pieza</span>
+            </button>
+            <button id="focusPartBtn" type="button" class="inline-flex items-center justify-center p-2 border border-slate-200 hover:border-slate-300 text-ocean-navy bg-white rounded-md shadow-xs transition-all" title="Centrar cámara en esta pieza">
+              <span class="material-symbols-outlined" style="font-size: 18px;">center_focus_strong</span>
+            </button>
+          </div>
+          <button id="hidePartBtn" type="button" class="py-1.5 px-3 border border-slate-200 text-slate-700 hover:text-ocean-navy hover:bg-slate-50 text-label-sm rounded-md font-label font-medium transition-all">
+            Ocultar temporalmente
+          </button>
+        </div>
+      </aside>
+
+      <!-- Bottom Floating Controls Toolbar (Glassmorphic) -->
+      <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 p-1.5 bg-white/90 backdrop-blur-xl border border-white/80 rounded-full shadow-2xl shadow-ocean-navy/10">
+        <!-- Orbit Auto-rotate toggle -->
+        <button id="autoRotateBtn" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 min-w-[130px] rounded-full text-label-sm font-label text-slate-700 hover:text-ocean-navy hover:bg-white transition-all font-medium" title="Activar/desactivar rotación suave automática">
+          <span class="material-symbols-outlined text-accent" style="font-size: 16px;">360</span>
+          <span id="autoRotateText" class="whitespace-nowrap">Rotación: ON</span>
+        </button>
+
+        <div class="h-4 w-px bg-slate-200"></div>
+
+        <!-- Lighting Mode Toggle -->
+        <button id="lightingToggleBtn" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 min-w-[120px] rounded-full text-label-sm font-label text-slate-700 hover:text-ocean-navy hover:bg-white transition-all font-medium" title="Alternar iluminación de estudio">
+          <span class="material-symbols-outlined" style="font-size: 16px;">wb_sunny</span>
+          <span class="whitespace-nowrap">Luz Estudio</span>
+        </button>
+
+        <div class="h-4 w-px bg-slate-200"></div>
+
+        <!-- Explode Slider -->
+        <div class="flex items-center gap-2 px-3">
+          <span class="material-symbols-outlined text-slate-500" style="font-size: 14px;">unfold_more</span>
+          <label for="explodeSlider" class="text-label-sm text-slate-700 font-label font-medium whitespace-nowrap">Despiece:</label>
+          <input id="explodeSlider" type="range" min="0" max="100" value="0" class="w-24 accent-ocean-navy cursor-pointer">
+          <span id="explodeSliderVal" class="text-label-sm font-mono text-ocean-navy font-semibold w-8">0%</span>
+        </div>
+
+        <div class="h-4 w-px bg-slate-200"></div>
+
+        <!-- Zoom Shortcuts -->
+        <div class="flex items-center pr-1">
+          <button id="zoomOutBtn" class="p-1.5 hover:bg-white text-slate-700 hover:text-ocean-navy rounded-full transition-all" title="Alejar">
+            <span class="material-symbols-outlined" style="font-size: 16px;">remove</span>
+          </button>
+          <button id="zoomInBtn" class="p-1.5 hover:bg-white text-slate-700 hover:text-ocean-navy rounded-full transition-all" title="Acercar">
+            <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Instructions Toast on Viewport -->
+      <div class="absolute bottom-6 left-6 z-10 hidden sm:flex items-center gap-2 px-3.5 py-2 bg-white/90 backdrop-blur-md border border-white/80 rounded-md text-label-sm text-slate-700 font-label font-medium shadow-xs">
+        <span class="material-symbols-outlined text-accent" style="font-size: 16px;">mouse</span>
+        <span>Arrastra para rotar • Clic para examinar pieza • Rueda para zoom</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Upload 3D Model Modal Dialog -->
+  <div id="uploadModal" class="fixed inset-0 z-50 hidden bg-ocean-navy/40 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-surface-enter" aria-hidden="true">
+    <div class="w-full max-w-xl bg-white backdrop-blur-2xl border border-white/80 rounded-xl p-6 shadow-2xl shadow-ocean-navy/20 relative">
+      <header class="flex items-start justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-ocean-navy/5 text-ocean-navy flex items-center justify-center">
+            <span class="material-symbols-outlined text-accent" style="font-size: 24px;">upload_file</span>
+          </div>
+          <div>
+            <h2 class="font-headline text-headline-md font-bold text-ocean-navy">Cargar Modelo 3D</h2>
+            <p class="text-body-sm text-slate-600">Soporte nativo para formatos CAD y mallas poligonales</p>
+          </div>
+        </div>
+        <button id="closeUploadModalBtn" type="button" aria-label="Cerrar ventana" class="p-1.5 text-slate-400 hover:text-ocean-navy hover:bg-slate-100 rounded-md transition-all">
+          <span class="material-symbols-outlined" style="font-size: 20px;">close</span>
+        </button>
+      </header>
+
+      <!-- Dropzone -->
+      <div id="dropzone" class="my-6 border-2 border-dashed border-slate-300 hover:border-accent hover:bg-accent/5 rounded-xl p-8 flex flex-col items-center justify-center gap-3 bg-slate-50/70 transition-all cursor-pointer group">
+        <div class="w-14 h-14 rounded-full bg-white shadow-sm flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
+          <span class="material-symbols-outlined" style="font-size: 28px;">cloud_upload</span>
+        </div>
+        <div class="text-center">
+          <p class="font-label text-label-lg font-semibold text-ocean-navy">Arrastra tu archivo 3D aquí</p>
+          <p class="text-body-sm text-slate-600 mt-1">o haz clic para explorar tus carpetas locales</p>
+        </div>
+        <div class="flex items-center gap-2 mt-2">
+          <span class="px-2 py-0.5 bg-slate-200 text-slate-800 text-label-sm font-mono font-medium rounded">.GLTF</span>
+          <span class="px-2 py-0.5 bg-slate-200 text-slate-800 text-label-sm font-mono font-medium rounded">.GLB</span>
+          <span class="px-2 py-0.5 bg-slate-200 text-slate-800 text-label-sm font-mono font-medium rounded">.OBJ</span>
+          <span class="px-2 py-0.5 bg-slate-200 text-slate-800 text-label-sm font-mono font-medium rounded">.STL</span>
+          <span class="px-2 py-0.5 bg-slate-200 text-slate-800 text-label-sm font-mono font-medium rounded">.FBX</span>
+        </div>
+      </div>
+
+      <!-- Model Upload Config Options -->
+      <div class="space-y-3 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-100">
+        <label class="flex items-center justify-between text-body-sm text-ocean-navy cursor-pointer">
+          <span class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-slate-500" style="font-size: 18px;">segment</span>
+            <span class="font-medium">Detectar automáticamente jerarquía de piezas separadas</span>
+          </span>
+          <input type="checkbox" checked class="rounded border-slate-300 text-ocean-navy focus:ring-accent accent-ocean-navy">
+        </label>
+        <label class="flex items-center justify-between text-body-sm text-ocean-navy cursor-pointer">
+          <span class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-slate-500" style="font-size: 18px;">auto_fix_high</span>
+            <span class="font-medium">Optimizar normales y centrar pivote en el origen</span>
+          </span>
+          <input type="checkbox" checked class="rounded border-slate-300 text-ocean-navy focus:ring-accent accent-ocean-navy">
+        </label>
+      </div>
+
+      <footer class="flex items-center justify-between pt-3 border-t border-slate-100">
+        <span class="text-body-sm text-slate-500 font-label font-medium">Tamaño máximo de archivo: 200 MB</span>
+        <div class="flex gap-2">
+          <button id="cancelUploadBtn" type="button" class="px-4 py-2 border border-slate-200 text-ocean-navy font-label text-label-md rounded-md hover:bg-slate-50 transition-all font-medium">
+            Cancelar
+          </button>
+          <button id="confirmUploadBtn" type="button" class="px-5 py-2 bg-ocean-navy hover:bg-navy-soft text-white font-label text-label-md rounded-md shadow-md shadow-ocean-navy/15 transition-all font-medium">
+            Cargar al Visor
+          </button>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Interactive Three.js 3D Engine & Part Inspection Logic -->
+  <script>
+    (function() {
+      // --- Model Pieces Definition ---
+      const piecesData = [
+        {
+          id: 'part_01',
+          code: 'PART-01_TURBINE',
+          name: 'Turbina Frontal Rotatoria',
+          category: 'Propulsor • Etapa Primaria',
+          material: 'Titanio Anodizado',
+          color: 0x0F2537,
+          highlightColor: 0x00A8CC,
+          polys: '18,400 tris',
+          dims: '140 × 140 × 60 mm',
+          status: 'Calibrado',
+          explodeOffset: { x: 0, y: 0, z: 2.8 },
+          meshType: 'cylinder',
+          args: [1.2, 0.9, 0.5, 32]
+        },
+        {
+          id: 'part_02',
+          code: 'PART-02_CORE_CHAMBER',
+          name: 'Cámara de Combustión Central',
+          category: 'Núcleo Térmico',
+          material: 'Aleación Níquel-Cromo',
+          color: 0x1E3E62,
+          highlightColor: 0x00A8CC,
+          polys: '24,600 tris',
+          dims: '110 × 110 × 120 mm',
+          status: 'Ensamblado',
+          explodeOffset: { x: 0, y: 0, z: 0 },
+          meshType: 'cylinder',
+          args: [0.9, 1.1, 1.4, 32]
+        },
+        {
+          id: 'part_03',
+          code: 'PART-03_NOZZLE',
+          name: 'Tobera de Escape Convergente',
+          category: 'Sistema de Empuje',
+          material: 'Grafito Reforzado',
+          color: 0x2A475E,
+          highlightColor: 0x00A8CC,
+          polys: '14,800 tris',
+          dims: '160 × 160 × 90 mm',
+          status: 'Inspeccionado',
+          explodeOffset: { x: 0, y: 0, z: -2.6 },
+          meshType: 'cylinder',
+          args: [1.3, 0.7, 0.9, 32]
+        },
+        {
+          id: 'part_04',
+          code: 'PART-04_INJECTOR_UPPER',
+          name: 'Módulo de Inyección Superior',
+          category: 'Alimentación Fluídica',
+          material: 'Acero Aeroespacial 316L',
+          color: 0x334155,
+          highlightColor: 0x00A8CC,
+          polys: '8,900 tris',
+          dims: '40 × 80 × 40 mm',
+          status: 'Conectado',
+          explodeOffset: { x: 0, y: 2.2, z: 0.2 },
+          meshType: 'box',
+          args: [0.45, 0.9, 0.45]
+        },
+        {
+          id: 'part_05',
+          code: 'PART-05_INJECTOR_LOWER',
+          name: 'Válvula de Retorno Inferior',
+          category: 'Alimentación Fluídica',
+          material: 'Acero Aeroespacial 316L',
+          color: 0x334155,
+          highlightColor: 0x00A8CC,
+          polys: '8,200 tris',
+          dims: '40 × 75 × 40 mm',
+          status: 'Conectado',
+          explodeOffset: { x: 0, y: -2.2, z: 0.2 },
+          meshType: 'box',
+          args: [0.45, 0.8, 0.45]
+        },
+        {
+          id: 'part_06',
+          code: 'PART-06_SENSOR_RING',
+          name: 'Anillo de Sensores Telemétricos',
+          category: 'Electrónica e Instrumentación',
+          material: 'Polímero Cerámico',
+          color: 0x0369A1,
+          highlightColor: 0x38BDF8,
+          polys: '9,300 tris',
+          dims: '125 × 125 × 25 mm',
+          status: 'Activo',
+          explodeOffset: { x: 1.8, y: 0, z: 0.5 },
+          meshType: 'torus',
+          args: [1.15, 0.1, 16, 48]
+        }
+      ];
+
+      // --- Three.js Scene Setup ---
+      const container = document.getElementById('threeContainer');
+      let width = container.clientWidth || window.innerWidth;
+      let height = container.clientHeight || window.innerHeight;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xF8FAFC);
+
+      const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+      camera.position.set(4.5, 3.2, 5.8);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      // --- Lighting ---
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+      scene.add(ambientLight);
+
+      const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
+      keyLight.position.set(6, 10, 8);
+      keyLight.castShadow = true;
+      keyLight.shadow.mapSize.width = 1024;
+      keyLight.shadow.mapSize.height = 1024;
+      scene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0xBAE6FD, 0.5);
+      fillLight.position.set(-6, -2, -6);
+      scene.add(fillLight);
+
+      // Subtle ground grid
+      const gridHelper = new THREE.GridHelper(10, 20, 0x94A3B8, 0xE2E8F0);
+      gridHelper.position.y = -2.2;
+      scene.add(gridHelper);
+
+      // --- Construct 3D Assembly Group ---
+      const assemblyGroup = new THREE.Group();
+      scene.add(assemblyGroup);
+
+      const partMeshes = [];
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+
+      piecesData.forEach((p) => {
+        let geom;
+        if (p.meshType === 'cylinder') {
+          geom = new THREE.CylinderGeometry(p.args[0], p.args[1], p.args[2], p.args[3]);
+          geom.rotateX(Math.PI / 2);
+        } else if (p.meshType === 'box') {
+          geom = new THREE.BoxGeometry(p.args[0], p.args[1], p.args[2]);
+        } else if (p.meshType === 'torus') {
+          geom = new THREE.TorusGeometry(p.args[0], p.args[1], p.args[2], p.args[3]);
+        }
+
+        const mat = new THREE.MeshStandardMaterial({
+          color: p.color,
+          roughness: 0.35,
+          metalness: 0.55,
+          wireframe: false
+        });
+
+        const mesh = new THREE.Mesh(geom, mat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        if (p.id === 'part_01') mesh.position.set(0, 0, 0.9);
+        else if (p.id === 'part_02') mesh.position.set(0, 0, 0);
+        else if (p.id === 'part_03') mesh.position.set(0, 0, -1.1);
+        else if (p.id === 'part_04') mesh.position.set(0, 1.05, 0.1);
+        else if (p.id === 'part_05') mesh.position.set(0, -1.05, 0.1);
+        else if (p.id === 'part_06') mesh.position.set(0, 0, 0.3);
+
+        mesh.userData = {
+          pieceData: p,
+          basePosition: mesh.position.clone(),
+          baseColor: p.color
+        };
+
+        assemblyGroup.add(mesh);
+        partMeshes.push(mesh);
+      });
+
+      // --- Interaction & State Management ---
+      let activePartId = piecesData[0].id;
+      let isolatedPartId = null;
+      let autoRotate = true;
+      let isExploded = false;
+      let wireframeActive = false;
+
+      const partsListContainer = document.getElementById('partsListContainer');
+      function renderPartsList() {
+        partsListContainer.innerHTML = '';
+        piecesData.forEach((p) => {
+          const isSelected = (p.id === activePartId);
+          const isIsolated = (isolatedPartId === p.id);
+          const row = document.createElement('div');
+          row.className = `flex items-center justify-between p-2 rounded-md cursor-pointer transition-all duration-state-change ${
+            isSelected 
+              ? 'bg-ocean-navy text-white shadow-sm' 
+              : 'hover:bg-slate-100 text-ocean-navy'
+          }`;
+          row.innerHTML = `
+            <div class="flex items-center gap-2 overflow-hidden">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: #${p.color.toString(16).padStart(6, '0')}"></span>
+              <div class="truncate">
+                <p class="font-label text-label-sm font-semibold truncate ${isSelected ? 'text-white' : 'text-ocean-navy'}">${p.name}</p>
+                <p class="${isSelected ? 'text-slate-200' : 'text-slate-600'} text-body-sm font-mono truncate text-[11px] font-medium">${p.code}</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              ${isIsolated ? '<span class="px-1.5 py-0.2 bg-accent/20 text-accent rounded text-[10px] font-mono">Aislada</span>' : ''}
+              <span class="material-symbols-outlined ${isSelected ? 'text-white' : 'text-slate-500'}" style="font-size: 16px;">chevron_right</span>
+            </div>
+          `;
+          row.addEventListener('click', () => {
+            selectPart(p.id);
+          });
+          partsListContainer.appendChild(row);
+        });
+      }
+
+      function updateInspector(part) {
+        document.getElementById('inspectorPartName').textContent = part.name;
+        document.getElementById('inspectorPartCategory').textContent = part.category;
+        document.getElementById('inspectorPartId').textContent = part.code;
+        document.getElementById('inspectorPartMaterial').innerHTML = `
+          <span class="w-3 h-3 rounded-full border border-white shadow-xs inline-block" style="background-color: #${part.color.toString(16).padStart(6, '0')}"></span>
+          ${part.material}
+        `;
+        document.getElementById('inspectorPartPoly').textContent = part.polys;
+        document.getElementById('inspectorPartDim').textContent = part.dims;
+        
+        const isolateBtnText = document.getElementById('isolateBtnText');
+        isolateBtnText.textContent = (isolatedPartId === part.id) ? 'Restaurar Vista' : 'Aislar Pieza';
+      }
+
+      function selectPart(id) {
+        activePartId = id;
+        const targetPart = piecesData.find(p => p.id === id);
+        if (targetPart) updateInspector(targetPart);
+
+        partMeshes.forEach(mesh => {
+          const p = mesh.userData.pieceData;
+          if (p.id === id) {
+            mesh.material.emissive = new THREE.Color(0x00A8CC);
+            mesh.material.emissiveIntensity = 0.4;
+          } else {
+            mesh.material.emissive = new THREE.Color(0x000000);
+            mesh.material.emissiveIntensity = 0;
+          }
+        });
+
+        renderPartsList();
+      }
+
+      selectPart('part_01');
+
+      // --- 3D Raycasting (Click Piece to Select) ---
+      let isDragging = false;
+      let pointerDownPos = { x: 0, y: 0 };
+
+      container.addEventListener('pointerdown', (e) => {
+        isDragging = false;
+        pointerDownPos.x = e.clientX;
+        pointerDownPos.y = e.clientY;
+      });
+
+      container.addEventListener('pointermove', (e) => {
+        if (Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) > 4) {
+          isDragging = true;
+        }
+      });
+
+      container.addEventListener('pointerup', (e) => {
+        if (!isDragging) {
+          const rect = renderer.domElement.getBoundingClientRect();
+          mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+          raycaster.setFromCamera(mouse, camera);
+          const intersects = raycaster.intersectObjects(partMeshes, false);
+
+          if (intersects.length > 0) {
+            const hitMesh = intersects[0].object;
+            if (hitMesh && hitMesh.userData && hitMesh.userData.pieceData) {
+              selectPart(hitMesh.userData.pieceData.id);
+            }
+          }
+        }
+      });
+
+      // --- Orbit Controls ---
+      let isOrbiting = false;
+      let previousMousePosition = { x: 0, y: 0 };
+
+      container.addEventListener('mousedown', (e) => {
+        if (e.button === 0) {
+          isOrbiting = true;
+          previousMousePosition = { x: e.clientX, y: e.clientY };
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        isOrbiting = false;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (isOrbiting) {
+          const deltaX = e.clientX - previousMousePosition.x;
+          const deltaY = e.clientY - previousMousePosition.y;
+
+          assemblyGroup.rotation.y += deltaX * 0.008;
+          assemblyGroup.rotation.x += deltaY * 0.008;
+          assemblyGroup.rotation.x = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, assemblyGroup.rotation.x));
+
+          previousMousePosition = { x: e.clientX, y: e.clientY };
+        }
+      });
+
+      container.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        camera.position.z += e.deltaY * 0.005;
+        camera.position.z = Math.max(2.5, Math.min(15, camera.position.z));
+      }, { passive: false });
+
+      // --- Explode Logic ---
+      function applyExplode(factor) {
+        partMeshes.forEach(mesh => {
+          const p = mesh.userData.pieceData;
+          mesh.position.x = mesh.userData.basePosition.x + (p.explodeOffset.x * factor);
+          mesh.position.y = mesh.userData.basePosition.y + (p.explodeOffset.y * factor);
+          mesh.position.z = mesh.userData.basePosition.z + (p.explodeOffset.z * factor);
+        });
+      }
+
+      const explodeSlider = document.getElementById('explodeSlider');
+      const explodeSliderVal = document.getElementById('explodeSliderVal');
+      const explodeToggleBtn = document.getElementById('explodeToggleBtn');
+      const explodeBtnText = document.getElementById('explodeBtnText');
+
+      explodeSlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        explodeSliderVal.textContent = val + '%';
+        applyExplode(val / 100);
+        isExploded = val > 0;
+        explodeBtnText.textContent = isExploded ? 'Reensamblar' : 'Explosionar Modelo';
+      });
+
+      explodeToggleBtn.addEventListener('click', () => {
+        isExploded = !isExploded;
+        const targetVal = isExploded ? 80 : 0;
+        explodeSlider.value = targetVal;
+        explodeSliderVal.textContent = targetVal + '%';
+        applyExplode(targetVal / 100);
+        explodeBtnText.textContent = isExploded ? 'Reensamblar' : 'Explosionar Modelo';
+      });
+
+      // --- Wireframe Toggle ---
+      const wireframeToggleBtn = document.getElementById('wireframeToggleBtn');
+      wireframeToggleBtn.addEventListener('click', () => {
+        wireframeActive = !wireframeActive;
+        partMeshes.forEach(mesh => {
+          mesh.material.wireframe = wireframeActive;
+        });
+        wireframeToggleBtn.classList.toggle('bg-accent/20', wireframeActive);
+        wireframeToggleBtn.classList.toggle('text-ocean-navy', wireframeActive);
+      });
+
+      // --- Isolate Part Feature ---
+      const isolatePartBtn = document.getElementById('isolatePartBtn');
+      isolatePartBtn.addEventListener('click', () => {
+        if (isolatedPartId === activePartId) {
+          isolatedPartId = null;
+          partMeshes.forEach(m => m.visible = true);
+        } else {
+          isolatedPartId = activePartId;
+          partMeshes.forEach(m => {
+            m.visible = (m.userData.pieceData.id === activePartId);
+          });
+        }
+        selectPart(activePartId);
+      });
+
+      const showAllBtn = document.getElementById('showAllBtn');
+      showAllBtn.addEventListener('click', () => {
+        isolatedPartId = null;
+        partMeshes.forEach(m => m.visible = true);
+        selectPart(activePartId);
+      });
+
+      const hidePartBtn = document.getElementById('hidePartBtn');
+      hidePartBtn.addEventListener('click', () => {
+        const mesh = partMeshes.find(m => m.userData.pieceData.id === activePartId);
+        if (mesh) mesh.visible = false;
+      });
+
+      // --- Auto-rotate toggle ---
+      const autoRotateBtn = document.getElementById('autoRotateBtn');
+      const autoRotateText = document.getElementById('autoRotateText');
+      autoRotateBtn.addEventListener('click', () => {
+        autoRotate = !autoRotate;
+        autoRotateText.textContent = `Rotación: ${autoRotate ? 'ON' : 'OFF'}`;
+        autoRotateBtn.classList.toggle('text-ocean-navy', autoRotate);
+      });
+
+      // --- Camera Presets ---
+      document.getElementById('viewIsoBtn').addEventListener('click', () => {
+        camera.position.set(4.5, 3.2, 5.8);
+        assemblyGroup.rotation.set(0, 0, 0);
+        camera.lookAt(0, 0, 0);
+      });
+      document.getElementById('viewFrontBtn').addEventListener('click', () => {
+        camera.position.set(0, 0, 7);
+        assemblyGroup.rotation.set(0, 0, 0);
+        camera.lookAt(0, 0, 0);
+      });
+      document.getElementById('viewTopBtn').addEventListener('click', () => {
+        camera.position.set(0, 7, 0.01);
+        assemblyGroup.rotation.set(0, 0, 0);
+        camera.lookAt(0, 0, 0);
+      });
+      document.getElementById('resetCamBtn').addEventListener('click', () => {
+        camera.position.set(4.5, 3.2, 5.8);
+        assemblyGroup.rotation.set(0, 0, 0);
+        camera.lookAt(0, 0, 0);
+      });
+
+      document.getElementById('zoomInBtn').addEventListener('click', () => {
+        camera.position.z = Math.max(2.5, camera.position.z - 0.8);
+      });
+      document.getElementById('zoomOutBtn').addEventListener('click', () => {
+        camera.position.z = Math.min(15, camera.position.z + 0.8);
+      });
+
+      // --- Filter Search Parts ---
+      const searchInput = document.getElementById('searchPartsInput');
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const rows = partsListContainer.children;
+        piecesData.forEach((p, idx) => {
+          const match = p.name.toLowerCase().includes(query) || p.code.toLowerCase().includes(query);
+          if (rows[idx]) rows[idx].style.display = match ? 'flex' : 'none';
+        });
+      });
+
+      // --- Upload Modal Logic ---
+      const uploadModal = document.getElementById('uploadModal');
+      const openUploadModalBtn = document.getElementById('openUploadModalBtn');
+      const closeUploadModalBtn = document.getElementById('closeUploadModalBtn');
+      const cancelUploadBtn = document.getElementById('cancelUploadBtn');
+      const confirmUploadBtn = document.getElementById('confirmUploadBtn');
+
+      function openModal() {
+        uploadModal.classList.remove('hidden');
+      }
+      function closeModal() {
+        uploadModal.classList.add('hidden');
+      }
+
+      openUploadModalBtn.addEventListener('click', openModal);
+      closeUploadModalBtn.addEventListener('click', closeModal);
+      cancelUploadBtn.addEventListener('click', closeModal);
+      confirmUploadBtn.addEventListener('click', () => {
+        closeModal();
+      });
+
+      uploadModal.addEventListener('click', (e) => {
+        if (e.target === uploadModal) closeModal();
+      });
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+      });
+
+      // --- Animation Loop ---
+      function animate() {
+        requestAnimationFrame(animate);
+
+        if (autoRotate && !isOrbiting) {
+          assemblyGroup.rotation.y += 0.0035;
+        }
+
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      window.addEventListener('resize', () => {
+        width = container.clientWidth || window.innerWidth;
+        height = container.clientHeight || window.innerHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+      });
+    })();
+  </script>
+
+
+</body></html>
