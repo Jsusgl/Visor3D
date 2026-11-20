@@ -2,6 +2,8 @@
 
 Aplicación web interactiva de ingeniería y visualización 3D que permite cargar modelos tridimensionales compatibles con WebGL, inspeccionar componentes individuales mediante selección por clic (Raycasting), calcular automáticamente sus dimensiones espaciales ($X, Y, Z$) y persistir sus especificaciones técnicas en una base de datos.
 
+Link: https://visor3d-production-c4cdd9a3.up.railway.app/
+
 ---
 
 ## 🚀 Características Principales
